@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <stdarg.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
@@ -28,6 +29,31 @@ method_t find_method(char* method) {
   return -1;
 }
 
+enum LOG_LEVEL {
+  DEBUG,
+  LOG,
+  WARN,
+  ERROR
+};
+
+void log_f(enum LOG_LEVEL level, const char* fmt, ...) {
+  char *lvl; 
+
+  switch (level) {
+    case DEBUG: lvl = "DEBUG"; break;
+    case LOG: lvl = "LOG"; break;
+    case WARN: lvl = "WARN"; break;
+    case ERROR: lvl = "ERROR"; break;
+  }
+
+  printf("[%s] ", lvl);
+  va_list args;
+  va_start(args, fmt);
+  vprintf(fmt, args);
+  va_end(args);
+  printf("\n");
+}
+
 char* readline(char **str_ptr) {
   if (!str_ptr || !(*str_ptr)) return NULL;
   char *start = *str_ptr;
@@ -43,6 +69,7 @@ char* readline(char **str_ptr) {
 }
 
 int main() {
+  log_f(ERROR, "Hello %s", "World");
   int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
   struct sockaddr_in addr = {
     .sin_family = AF_INET,
@@ -71,12 +98,13 @@ int main() {
     }
     
     char buf[CHUNK_SIZE] = {};
-    int rec_bytes = recv(client_fd, &buf, CHUNK_SIZE, 0);
+    int rec_bytes = recv(client_fd, &buf, CHUNK_SIZE - 1, 0); // -1 - if request fills entire buffer there is space for \0
+    buf[rec_bytes] = '\0'; // null terminte so strstr knows when to stop
     if (rec_bytes < 0) {
       printf("recv() failed with code %d", errno);
       exit(EXIT_FAILURE);
     }
-      
+     
     char *cur = buf;
     char *line = readline(&cur); // start line
     if (line == NULL) {
@@ -84,20 +112,37 @@ int main() {
       close(client_fd);
       continue;
     }
+
+    char *method_end = strchr(line, ' ');
+    if (method_end == NULL) {
+      printf("Missing method separator\n");
+      close(client_fd);
+      continue;
+    }
+
+    char *path_end = strchr(method_end + 1, ' ');
+    if (path_end == NULL) {
+      printf("Missing path separator\n");
+      close(client_fd);
+      continue;
+    }
+
+    size_t method_len = method_end - line;
+    char method[method_len + 1];
+    strncpy(method, line, method_len);
+    method[method_len] = '\0';
     
+    size_t path_len = path_end - method_end - 1;
+    char path[path_len + 1];
+    strncpy(path, method_end + 1, path_len);
+    path[path_len] = '\0';
+    
+    size_t version_len = strlen(line) - (path_end - line) - 1;
+    char version[version_len + 1];
+    strncpy(version, path_end + 1, version_len);
+    version[version_len] = '\0';
     
     while ((line = readline(&cur)) != NULL) {} // headers
-    
-    // char* ocur = strstr((const char*)&buf, "\r\n\r\n");
-    // while (ocur != NULL) {
-    //
-    //   ocur = strstr((const char*)&buf, "\r\n\r\n");
-    // }
-    //
-    // for (int i = 0; i < rec_bytes; i++) {
-    //
-    // }
-
     
     if (send(client_fd, &buf, CHUNK_SIZE, 0) < 0) {
       printf("send() failed with code %d", errno);
