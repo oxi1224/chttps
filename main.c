@@ -8,6 +8,7 @@
 #include <arpa/inet.h>
 
 #define CHUNK_SIZE 16 * 1024 // 16 KB
+#define MAX_REQUEST_SIZE 24 * 1024 * 1024 // 24 MB
 
 // Right now I just want the most basic http server there is
 typedef enum {
@@ -91,6 +92,8 @@ typedef struct {
   const char *path;
   const char *method;
   const char *version;
+  const char *body;
+  size_t body_length;
   http_header_list header_list;
 } http_request;
 
@@ -98,6 +101,7 @@ void free_http_request(http_request r) {
   free((void*)r.method);
   free((void*)r.path);
   free((void*)r.version);
+  free((void*)r.body);
   for (size_t i = 0; i < r.header_list.count; i++) {
     free((void*)r.header_list.headers[i].name);
     free((void*)r.header_list.headers[i].value);
@@ -109,7 +113,7 @@ int main() {
   struct sockaddr_in addr = {
     .sin_family = AF_INET,
     .sin_addr.s_addr = inet_addr("127.0.0.1"),
-    .sin_port = htons(9001)
+    .sin_port = htons(9000)
   };
 
   if (bind(sock_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
@@ -175,6 +179,7 @@ int main() {
     };
   
     int parsing_err = 0;
+    size_t body_length = 0;
     while ((line = readline(&cur)) != NULL && strcmp(line, "") != 0) {
       char* delim = strstr(line, ":");
       if (delim == NULL) {
@@ -184,9 +189,12 @@ int main() {
         break;
       }
       
+      char *name = substr(line, 0, delim - line);
+      char *value = substr(line, delim - line + 2, strlen(line));
+      if (strcmp(name, "Content-Length") == 0) body_length = atoi(value);
       header_list.headers[header_list.count++] = (http_header){
-        .name = substr(line, 0, delim - line),
-        .value = substr(line, delim - line + 2, strlen(line))
+        .name = name,
+        .value = value
       };
       
       if (header_list.count == header_list.capacity) {
@@ -199,8 +207,46 @@ int main() {
     }
     if (parsing_err) continue;
     request.header_list = header_list;
+
+    size_t header_length = cur - buf - 1;
+    if (header_length + body_length > MAX_REQUEST_SIZE) {
+      /// TODO: Respond with a 413 Payload Too Large, for now just exit
+      flog(WARN, "Payload exceeds maximum (%d)", header_length +  body_length);
+      close(client_fd);
+      free_http_request(request);
+      continue;
+    }
+
+    request.body_length = body_length;
+    if (header_length + body_length >= CHUNK_SIZE) {
+      size_t read_bytes = CHUNK_SIZE - (cur - buf);
+      char *body = malloc(sizeof(char) * body_length);
+      if (body == NULL) {
+        flog(ERROR, "malloc() failed with code %d", errno);
+        exit(EXIT_FAILURE);
+      }
+      memcpy(body, cur, sizeof(char) * read_bytes);
+
+      while (read_bytes != body_length) {
+        ssize_t n = recv(client_fd, body + read_bytes, body_length - read_bytes, 0);
+        if (n <= 0) {
+          flog(WARN, "recv() failed or connection closed while reading (%d)", errno);
+          free(body);
+          free_http_request(request);
+          parsing_err = 1;
+          break;
+        }
+        read_bytes += n;
+      }
+      request.body = body;
+    } else {
+      char *body = malloc(sizeof(char) * body_length);
+      memcpy(body, cur, sizeof(char) * body_length);
+      request.body = body;
+    }
+    if (parsing_err) continue;
     
-    printf("-------------"); 
+    printf("-------------\n"); 
     flog(DEBUG, "Method: %s | Path: %s | Version: %s", request.method, request.path, request.version);
     flog(DEBUG, "Headers(%d)", request.header_list.count);
     for (size_t i = 0; i < request.header_list.count; i++) {
@@ -211,7 +257,9 @@ int main() {
         request.header_list.headers[i].value
       );
     }
-    printf("-------------"); 
+    flog(DEBUG, "Body (%d)", request.body_length);
+    flog(DEBUG, "%.*s", request.body_length, request.body);
+    printf("-------------\n"); 
 
     if (send(client_fd, &buf, CHUNK_SIZE, 0) < 0) {
       printf("send() failed with code %d", errno);
