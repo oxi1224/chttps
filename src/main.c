@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+#include "hashmap.h"
 #include "http.h"
 #include "log.h"
 
@@ -69,18 +70,13 @@ int main() {
       close(client_fd);
       continue;
     }
-
+    
     http_request request = {
       .method = substr(line, 0, method_end - line),
       .path = substr(line, method_end - line + 1, path_end - line),
       .version = substr(line, path_end - line, strlen(line)),
     };
-
-    http_header_list header_list = {
-      .capacity = 8,
-      .count = 0,
-      .headers = malloc(sizeof(http_header) * 8)
-    };
+    hash_map *headers = hm_create();
 
     int parsing_err = 0;
     size_t body_length = 0;
@@ -96,22 +92,11 @@ int main() {
       char *name = substr(line, 0, delim - line);
       char *value = substr(line, delim - line + 2, strlen(line));
       if (strcmp(name, "Content-Length") == 0) body_length = atoi(value);
-      header_list.headers[header_list.count++] = (http_header){
-        .name = name,
-        .value = value
-      };
-      
-      if (header_list.count == header_list.capacity) {
-        header_list.capacity *= 2;
-        header_list.headers = realloc(
-          header_list.headers,
-          header_list.capacity * sizeof(http_header)
-        );
-      }
+      hm_set(headers, name, value);
     }
     if (parsing_err) continue;
-    request.header_list = header_list;
-
+    request.headers = headers;
+  
     size_t header_length = cur - buf - 1;
     if (header_length + body_length > MAX_REQUEST_SIZE) {
       /// TODO: Respond with a 413 Payload Too Large, for now just exit
@@ -122,8 +107,6 @@ int main() {
     }
 
     request.body_length = body_length;
-    char* body = malloc(sizeof(char) * body_length);
-
     if (header_length + body_length >= CHUNK_SIZE) {
       size_t read_bytes = CHUNK_SIZE - (cur - buf);
       char *body = malloc(sizeof(char) * body_length);
@@ -154,13 +137,14 @@ int main() {
     
     printf("-------------\n"); 
     flog(DEBUG, "Method: %s | Path: %s | Version: %s", request.method, request.path, request.version);
-    flog(DEBUG, "Headers(%d)", request.header_list.count);
-    for (size_t i = 0; i < request.header_list.count; i++) {
+    flog(DEBUG, "Headers(%d)", request.headers->size);
+    for (size_t i = 0; i < request.headers->capacity; i++) {
+      if (request.headers->entries[i].value == NULL) continue;
       flog(
         DEBUG,
         "%s: %s",
-        request.header_list.headers[i].name,
-        request.header_list.headers[i].value
+        request.headers->entries[i].key,
+        request.headers->entries[i].value
       );
     }
     flog(DEBUG, "Body (%d)", request.body_length);

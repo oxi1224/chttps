@@ -12,31 +12,34 @@ hash_map *hm_create() {
   if (hm == NULL) return NULL;
   hm->capacity = HM_START_CAPACITY;
   hm->size = 0;
-  hm->entries = malloc(sizeof(hm_entry) * HM_START_CAPACITY);
+  hm->entries = calloc(HM_START_CAPACITY, sizeof(hm_entry));
   return hm;
 }
 
 static uint64_t hash_key(const char *key) {
   uint64_t hash = FNV_OFFSET_BASIS;
-
-  for (const char *c = key; c != NULL; c++) {
+  size_t len = strlen(key);
+  for (size_t i = 0; i < len; i++) {
     hash *= FNV_PRIME;
-    hash ^= (uint64_t)c;
+    hash ^= (uint64_t)key[i];
   }
   return hash;
 }
 
 const char *hm_set(hash_map *hm, const char *key, void *value) {
   if (hm->size + 1 >= hm->capacity / 2) {
+    size_t old_capacity = hm->capacity;
     hm->capacity *= 2;
     hm->entries = realloc(hm->entries, sizeof(hm_entry) * hm->capacity);
+    // Zero out memory to avoid comparing to garbage
+    memset(hm->entries + old_capacity, 0, sizeof(hm_entry) * (hm->capacity - old_capacity));
     if (hm->entries == NULL) return NULL;
   }
 
   size_t index = hash_key(key) & (uint64_t)(hm->capacity - 1);
   
   while(
-    hm->entries[index].key != NULL ||
+    hm->entries[index].key != NULL &&
     strcmp(hm->entries[index].key, key) != 0
   ) {
     index++;
@@ -45,10 +48,9 @@ const char *hm_set(hash_map *hm, const char *key, void *value) {
 
   if (hm->entries[index].key == NULL) {
     hm_entry entry = {
-      .key = strdup(key),
-      .value = malloc(sizeof(value))
+      .key = key,
+      .value = value
     };
-    memcpy(entry.value, value, sizeof(value));
     hm->entries[index] = entry;
     hm->size++;
   }
@@ -84,7 +86,7 @@ void *hm_get(hash_map *hm, const char *key) {
 }
 
 void hm_free(hash_map *hm) {
-  for (int i = 0; i < hm->capacity; i++) {
+  for (size_t i = 0; i < hm->capacity; i++) {
     if (hm->entries[i].key == NULL) continue;
     free((void*)hm->entries[i].key);
     free((void*)hm->entries[i].value);

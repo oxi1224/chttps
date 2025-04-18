@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdio.h>
+#include "hashmap.h"
 
 #define CHUNK_SIZE 16 * 1024 // 16 KB
 #define MAX_REQUEST_SIZE 24 * 1024 * 1024 // 24 MB
@@ -23,18 +24,12 @@ typedef struct {
 } http_header;
 
 typedef struct {
-  http_header *headers;
-  size_t count;
-  size_t capacity;
-} http_header_list;
-
-typedef struct {
   const char *path;
   const char *method;
   const char *version;
   const char *body;
   size_t body_length;
-  http_header_list header_list;
+  const hash_map *headers;
 } http_request;
 
 // TODO: Move this here later, prefer it in main.c for now

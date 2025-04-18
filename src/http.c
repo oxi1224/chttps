@@ -6,7 +6,7 @@
 #include <arpa/inet.h>
 
 #include "http.h"
-// #include "log.h"
+#include "hashmap.h"
 
 const char* method_table[] = { "GET", "POST", NULL };
 method_t find_method(char* method) {
@@ -21,10 +21,7 @@ void free_http_request(http_request r) {
   free((void*)r.path);
   free((void*)r.version);
   free((void*)r.body);
-  for (size_t i = 0; i < r.header_list.count; i++) {
-    free((void*)r.header_list.headers[i].name);
-    free((void*)r.header_list.headers[i].value);
-  }
+  hm_free((void*)r.headers);
 }
 
 char *readline(char **str_ptr) {
