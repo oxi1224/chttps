@@ -150,11 +150,24 @@ int main() {
     flog(DEBUG, "Body (%d)", request.body_length);
     flog(DEBUG, "%.*s", request.body_length, request.body);
     printf("-------------\n"); 
+    
+    hash_map *res_headers = hm_create();
+    hm_set(res_headers, "Host", "localhost");
+    http_response response = {
+      .status_code = 200,
+      .status_message = "OK",
+      .headers = res_headers,
+      .body = (char[]){'H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd'},
+      .body_length = 11
+    };
+    size_t out_buf_len;
+    char *out_buf = serialize_response(response, &out_buf_len);
 
-    if (send(client_fd, &buf, CHUNK_SIZE, 0) < 0) {
+    if (send(client_fd, out_buf, out_buf_len, 0) < 0) {
       printf("send() failed with code %d", errno);
     }
     free_http_request(request);
+    free_http_response(response);
     close(client_fd);
   }
 
