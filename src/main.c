@@ -1,11 +1,20 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <errno.h>
 #include <string.h>
 #include <stdarg.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
+
+#ifdef __linux__
+  #include <sys/socket.h>
+  #include <arpa/inet.h>
+  #include <unistd.h>
+#else
+  #define WIN32_LEAN_AND_MEAN
+  #include <winsock2.h>
+  #define close(fd) closesocket(fd)
+  #define socklen_t int
+  #define ssize_t int
+#endif
 
 #include "hashmap.h"
 #include "http.h"
@@ -13,6 +22,14 @@
 
 int main() {
   // http_start("localhost", 9000);
+  #ifdef _WIN32
+  WSADATA wsa;
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+    flog(ERROR, "WSAStartup failed with code %d", WSAGetLastError());
+    exit(EXIT_FAILURE);
+  }
+  #endif
+
   int sock_fd = socket(AF_INET, SOCK_STREAM, 0);
   struct sockaddr_in addr = {
     .sin_family = AF_INET,
@@ -42,7 +59,7 @@ int main() {
     }
     
     char buf[CHUNK_SIZE] = {};
-    int rec_bytes = recv(client_fd, &buf, CHUNK_SIZE - 1, 0); // -1 - if request fills entire buffer there is space for \0
+    int rec_bytes = recv(client_fd, buf, CHUNK_SIZE - 1, 0); // -1 - if request fills entire buffer there is space for \0
     buf[rec_bytes] = '\0'; // null terminte so strstr knows when to stop
     if (rec_bytes < 0) {
       flog(ERROR, "recv() failed with code %d", errno);
@@ -152,24 +169,31 @@ int main() {
     printf("-------------\n"); 
     
     hash_map *res_headers = hm_create();
-    hm_set(res_headers, "Host", "localhost");
+    hm_set(res_headers, strdup("Host"), strdup("localhost"));
     http_response response = {
       .status_code = 200,
-      .status_message = "OK",
+      .status_message = strdup("OK"),
       .headers = res_headers,
-      .body = (char[]){'H', 'e', 'l', 'l', 'o', ' ', 'W', 'o', 'r', 'l', 'd'},
+      .body = malloc(11),
       .body_length = 11
     };
+    memcpy(response.body, "Hello World", 11);
     size_t out_buf_len;
     char *out_buf = serialize_response(response, &out_buf_len);
-
+    
     if (send(client_fd, out_buf, out_buf_len, 0) < 0) {
-      printf("send() failed with code %d", errno);
+      flog(ERROR, "send() failed with code %d", errno);
     }
+
     free_http_request(request);
     free_http_response(response);
-    close(client_fd);
-  }
 
+    close(client_fd);
+    // printf("closed\n");
+  }
+  
+  #ifdef _WIN32
+  WSACleanup();
+  #endif
   return 0;
 }
