@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
 #include "http.h"
 #include "hashmap.h"
@@ -13,46 +14,46 @@ method_t find_method(char* method) {
   return -1;
 }
 
-void free_http_request(http_request r) {
-  free((void*)r.method);
-  free((void*)r.path);
-  free((void*)r.version);
-  free((void*)r.body);
-  hm_free((void*)r.headers);
+void free_http_request(http_request *r) {
+  free((void*)r->method);
+  free((void*)r->path);
+  free((void*)r->version);
+  free((void*)r->body);
+  hm_free((void*)r->headers);
 }
 
-void free_http_response(http_response r) {
-  free(r.status_message);
-  free(r.body);
-  hm_free(r.headers);
+void free_http_response(http_response *r) {
+  if (r->status_message != NULL) free(r->status_message);
+  if (r->body != NULL) free(r->body);
+  hm_free(r->headers);
 }
 
-char *serialize_response(http_response r, size_t *out_length) {
+char *serialize_response(http_response *r, size_t *out_length) {
   // 15 = 9 (version + space) + 3 (code) + space + 2 (\r\n)
-  size_t buf_length = 15 + strlen(r.status_message);
-  if (r.headers->size > 0) {
-    for (size_t i = 0; i < r.headers->capacity; i++) {
-      hm_entry entry = r.headers->entries[i];
+  size_t buf_length = 15 + strlen(r->status_message);
+  if (r->headers->size > 0) {
+    for (size_t i = 0; i < r->headers->capacity; i++) {
+      hm_entry entry = r->headers->entries[i];
       if (entry.key == NULL) continue;
       buf_length += strlen(entry.key) + (strlen((char *)entry.value)) + 4; // space + : + \r\n
     }
   }
-  buf_length += 2 + r.body_length;
+  buf_length += 2 + r->body_length;
   
   char *buf = malloc(sizeof(char) * buf_length);
   if (buf == NULL) return NULL;
-  int offset = snprintf(buf, buf_length, "%s %d %s\r\n", HTTP_VERSION, r.status_code, r.status_message);
+  int offset = snprintf(buf, buf_length, "%s %d %s\r\n", HTTP_VERSION, r->status_code, r->status_message);
   
-  if (r.headers->size > 0) {
-    for (size_t i = 0; i < r.headers->capacity; i++) {
-      hm_entry entry = r.headers->entries[i];
+  if (r->headers->size > 0) {
+    for (size_t i = 0; i < r->headers->capacity; i++) {
+      hm_entry entry = r->headers->entries[i];
       if (entry.key == NULL) continue;
       offset += snprintf(buf + offset, buf_length - offset, "%s: %s\r\n", entry.key, (char *)entry.value);
     }
   }
   offset += snprintf(buf + offset, buf_length - offset, "\r\n");
   *out_length = buf_length;
-  memcpy(buf + offset, r.body, r.body_length);
+  memcpy(buf + offset, r->body, r->body_length);
   return buf;
 }
 

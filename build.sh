@@ -1,2 +1,2 @@
-gcc ./src/*.c -o out/server && ./out/server
+gcc ./src/*.c -o out/server -lssl -lcrypto && ./out/server
 

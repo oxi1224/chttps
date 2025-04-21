@@ -43,10 +43,12 @@ typedef struct {
 
 // TODO: Move this here later, prefer it in main.c for now
 // void http_start(const char *addr, int port);
-void free_http_request(http_request r);
-void free_http_response(http_response r);
 
-char *serialize_response(http_response r, size_t *out_length);
+void free_http_request(http_request *r);
+void free_http_response(http_response *r);
+
+char *serialize_response(http_response *r, size_t *out_length);
+
 // TODO: Move this to a separate file (idk, maybe?)
 char *readline(char **str_ptr);
 char *substr(const char* src, size_t start, size_t end);

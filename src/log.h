@@ -1,8 +1,8 @@
 #pragma once
 
-#ifdef ERROR
-#undef ERROR
-#endif
+// #ifdef ERROR
+// #undef ERROR
+// #endif
 
 enum LOG_LEVEL {
   DEBUG,
