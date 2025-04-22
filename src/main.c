@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdarg.h>
+#include <signal.h>
 
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -15,27 +16,34 @@
 #include "http.h"
 #include "log.h"
 
+volatile sig_atomic_t SHUTDOWN = 0;
+void handle_sig(int sig) { SHUTDOWN = 1; }
+
 void exit_and_log(int sock_fd, SSL_CTX *context, const char *fmt, ...) {
+  if (context != NULL) SSL_CTX_free(context);
+  if (sock_fd > -1) close(sock_fd);
+  if (SHUTDOWN) return;
+
   va_list args;
   va_start(args, fmt);
   flog(ERROR, fmt, args);
   va_end(args);
   
   if (ERR_peek_error() != 0) ERR_print_errors_fp(stderr);
-  if (context != NULL) SSL_CTX_free(context);
-  if (sock_fd > -1) close(sock_fd);
   exit(EXIT_FAILURE);
 }
 
 void close_and_log(int client_fd, SSL *ssl, const char *fmt, ...) {
+  if (ssl != NULL) SSL_free(ssl);
+  if (client_fd > -1) close(client_fd);
+  if (SHUTDOWN) return;
+
   va_list args;
   va_start(args, fmt);
   flog(WARN, fmt, args);
   va_end(args);
 
   if (ERR_peek_error() != 0) ERR_print_errors_fp(stderr);
-  if (ssl != NULL) SSL_free(ssl);
-  if (client_fd > -1) close(client_fd);
 }
 
 void handle_request(http_request *req, http_response *res) {
@@ -64,7 +72,15 @@ void handle_request(http_request *req, http_response *res) {
   res->body_length = 11;
 }
 
+
 int main() {
+  struct sigaction sa;
+  sa.sa_handler = handle_sig;
+  sa.sa_flags = 0;
+  sigemptyset(&sa.sa_mask);
+  sigaction(SIGINT, &sa, NULL);
+  sigaction(SIGTERM, &sa, NULL);
+
   SSL_load_error_strings();
   OpenSSL_add_ssl_algorithms();
 
@@ -96,7 +112,7 @@ int main() {
   }
   
   flog(DEBUG, "Listening for clients");
-  while (1) {
+  while (!SHUTDOWN) {
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     int client_fd = accept(sock_fd, (struct sockaddr*)&client_addr, &client_addr_len);
@@ -216,7 +232,7 @@ int main() {
     close(client_fd);
   }
 
-  flog(LOG, "Shutting down");
+  flog(LOG, "Shutting down...");
   SSL_CTX_free(context);
   close(sock_fd);
   return 0;
