@@ -1,21 +1,21 @@
 #pragma once
 
 #include <stdio.h>
+
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <openssl/ssl.h>
+
 #include "hashmap.h"
 
 #define CHUNK_SIZE 16 * 1024 // 16 KB
 #define MAX_REQUEST_SIZE 24 * 1024 * 1024 // 24 MB
-#define HTTP_VERSION "HTTP/1.1"
+#define HTTP_VERSION "HTTP/1.0"
 
 typedef enum {
-  // OPTIONS,
   GET,
-  // HEAD,
   POST,
-  // PUT,
-  // DELETE,
-  // TRACE,
-  // CONNECT
 } method_t;
 method_t find_method(char* method);
 
@@ -41,14 +41,47 @@ typedef struct {
   size_t body_length;
 } http_response;
 
-// TODO: Move this here later, prefer it in main.c for now
-// void http_start(const char *addr, int port);
-
 void free_http_request(http_request *r);
 void free_http_response(http_response *r);
-
 char *serialize_response(http_response *r, size_t *out_length);
 
-// TODO: Move this to a separate file (idk, maybe?)
 char *readline(char **str_ptr);
 char *substr(const char* src, size_t start, size_t end);
+
+typedef struct {
+  const char *address;
+  int port;
+  hash_map *handlers;
+  int has_ssl;
+  const char *cert_path;
+  const char *key_path;
+  
+  // Internal
+  int _socket_fd;
+  SSL_CTX *_ssl_context;
+} http_server;
+
+typedef struct {
+  int client_fd;
+  SSL *ssl;
+} http_client;
+
+typedef void(*request_handler)(http_request*, http_response*);
+
+http_server http_create(const char *address, int port);
+void http_use_ssl(http_server *server, const char *cert_path, const char *key_path);
+void register_handler(http_server *server, const char *path, request_handler cb);
+
+// -- maybe? --
+http_client http_accept(http_server *server, struct sockaddr *__restrict addr, socklen_t *__restrict addr_len);
+int http_read(http_client *client, void *buf, size_t n);
+int http_write(http_client *client, void *buf, size_t n);
+//  -----------
+
+void exit_and_log(http_server *server, const char *fmt, ...);
+void close_and_log(http_client *client, const char *fmt, ...);
+
+void http_init(http_server *server);
+void http_cleanup(http_server *server);
+void http_start(http_server *server);
+

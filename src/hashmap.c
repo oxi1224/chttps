@@ -76,7 +76,10 @@ void hm_remove(hash_map *hm, const char *key) {
 void *hm_get(hash_map *hm, const char *key) {
   size_t index = hash_key(key) & (uint64_t)(hm->capacity - 1);
   size_t start_index = index; 
-  while (strcmp(hm->entries[index].key, key) != 0) {
+  while (
+    hm->entries[index].key != NULL &&
+    strcmp(hm->entries[index].key, key) != 0
+  ) {
     index++;
     if (index >= hm->capacity) index = 0;
     // If no key was found (done a full loop)

@@ -5,6 +5,7 @@
 
 #include "http.h"
 #include "hashmap.h"
+#include "log.h"
 
 const char* method_table[] = { "GET", "POST", NULL };
 method_t find_method(char* method) {
@@ -66,6 +67,7 @@ char *readline(char **str_ptr) {
   size_t line_len = end - start;
   char *line = malloc(sizeof(char) * (line_len + 1));
   strncpy(line, start, line_len);
+
   line[line_len] = '\0';
   *str_ptr = end + 2; // move the pointer past \r\n so next call gives next line
   return line;
@@ -79,4 +81,24 @@ char *substr(const char* src, size_t start, size_t end) {
   return val;
 }
 
-// http_request http_parse_request(const char* buf);
+http_server http_create(const char *address, int port) {
+  http_server s = {
+    .address = address,
+    .port = port,
+    .handlers = hm_create(),
+    .has_ssl = 0
+  };
+  return s;
+}
+
+void http_use_ssl(http_server *server, const char *cert_path, const char *key_path) {
+  server->has_ssl = 1;
+  server->cert_path = cert_path;
+  server->key_path = key_path;
+}
+
+void register_handler(http_server *server, const char *path, request_handler cb) {
+  hm_set(server->handlers, strdup(path), (void *)cb);
+}
+
+void http_start(http_server *server);

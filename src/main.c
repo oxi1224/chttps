@@ -72,8 +72,19 @@ void handle_request(http_request *req, http_response *res) {
   res->body_length = 11;
 }
 
+void test_handler(http_request *req, http_response *res) {
+  const char *html = "<body>Test</body>";
+  res->status_code = 200;
+  res->status_message = strdup("OK");
+  res->body = strdup(html);
+  res->body_length = strlen(html);
+}
 
 int main() {
+  handler_map = hm_create();
+  register_handler("*", handle_request);
+  register_handler("/test", test_handler);
+
   struct sigaction sa;
   sa.sa_handler = handle_sig;
   sa.sa_flags = 0;
@@ -111,12 +122,14 @@ int main() {
     exit_and_log(sock_fd, context, "listen() failed with code %d", errno);
   }
   
+  request_handler default_handler = hm_get(handler_map, "*");
+  if (default_handler == NULL) flog(WARN, "No default handler specified (set with register_handler(\"*\", fun)");
+
   flog(DEBUG, "Listening for clients");
   while (!SHUTDOWN) {
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     int client_fd = accept(sock_fd, (struct sockaddr*)&client_addr, &client_addr_len);
-
     if (client_fd < 0) {
       close_and_log(-1, NULL, "accept() failed with code %d", errno);
       continue;
@@ -199,6 +212,7 @@ int main() {
       memcpy(body, cur, sizeof(char) * read_bytes);
 
       while (read_bytes != body_length) {
+        /// TODO: !!!!!!!!!
         ssize_t n = recv(client_fd, body + read_bytes, body_length - read_bytes, 0);
         if (n <= 0) {
           close_and_log(client_fd, ssl, "recv() failed with code %d", errno);
@@ -218,7 +232,10 @@ int main() {
     
     http_response response;
     response.headers = hm_create();
-    handle_request(&request, &response);
+
+    request_handler handler = hm_get(handler_map, request.path);
+    if (handler != NULL) handler(&request, &response);
+    else if(default_handler != NULL) default_handler(&request, &response);
 
     size_t out_buf_len;
     char *out_buf = serialize_response(&response, &out_buf_len);
