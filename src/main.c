@@ -14,7 +14,7 @@
 
 #include "hashmap.h"
 #include "http.h"
-#include "log.h"
+#include "log.h" 
 
 volatile sig_atomic_t SHUTDOWN = 0;
 void handle_sig(int sig) { SHUTDOWN = 1; }
