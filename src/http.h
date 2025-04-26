@@ -53,8 +53,6 @@ typedef struct {
   int port;
   hash_map *handlers;
   int has_ssl;
-  const char *cert_path;
-  const char *key_path;
   
   // Internal
   int _socket_fd;
@@ -64,24 +62,24 @@ typedef struct {
 typedef struct {
   int client_fd;
   SSL *ssl;
+  int _ssl_ret;
 } http_client;
 
 typedef void(*request_handler)(http_request*, http_response*);
 
 http_server http_create(const char *address, int port);
-void http_use_ssl(http_server *server, const char *cert_path, const char *key_path);
+int http_use_ssl(http_server *server, const char *cert_path, const char *key_path);
 void register_handler(http_server *server, const char *path, request_handler cb);
 
-// -- maybe? --
 http_client http_accept(http_server *server, struct sockaddr *__restrict addr, socklen_t *__restrict addr_len);
 int http_read(http_client *client, void *buf, size_t n);
-int http_write(http_client *client, void *buf, size_t n);
-//  -----------
+int http_write(http_client *client, http_response *response);
+
+int http_init(http_server *server);
+void http_stop(http_server *server);
+void http_close(http_client *client);
 
 void exit_and_log(http_server *server, const char *fmt, ...);
 void close_and_log(http_client *client, const char *fmt, ...);
 
-void http_init(http_server *server);
-void http_cleanup(http_server *server);
-void http_start(http_server *server);
-
+// void http_start(http_server *server);
