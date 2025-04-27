@@ -12,6 +12,24 @@
 #define CHUNK_SIZE 16 * 1024 // 16 KB
 #define MAX_REQUEST_SIZE 24 * 1024 * 1024 // 24 MB
 #define HTTP_VERSION "HTTP/1.0"
+#define MAX_ERRORS 16
+
+typedef enum {
+  ERR_OS,
+  ERR_OPENSSL,
+  ERR_HTTP
+} error_origin;
+
+typedef struct {
+  error_origin origin;
+  int error_code;
+} error_entry;
+
+static error_entry error_queue[MAX_ERRORS];
+static int error_count = 0;
+void add_error(error_origin origin, int error_code);
+void print_errors(FILE *fp);
+char *get_error_string(error_entry entry); // strerror(); ERR_error_string();
 
 typedef enum {
   GET,

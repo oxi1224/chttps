@@ -193,7 +193,7 @@ int main() {
     else if(default_handler != NULL) default_handler(&request, &response);
 
     if (http_write(&client, &response) < 0) {
-      flog(ERROR, "http_send failed");
+      flog(ERROR, "http_write failed");
     }
 
     free_http_request(&request);
