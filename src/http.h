@@ -14,22 +14,24 @@
 #define HTTP_VERSION "HTTP/1.0"
 #define MAX_ERRORS 16
 
-typedef enum {
-  ERR_OS,
-  ERR_OPENSSL,
-  ERR_HTTP
-} error_origin;
+/// I will implement an error system later because I plan on implementing
+/// the TLS 1.3 exchange myself (OpenSSL for crypto stuff)
 
-typedef struct {
-  error_origin origin;
-  int error_code;
-} error_entry;
-
-static error_entry error_queue[MAX_ERRORS];
-static int error_count = 0;
-void add_error(error_origin origin, int error_code);
-void print_errors(FILE *fp);
-char *get_error_string(error_entry entry); // strerror(); ERR_error_string();
+// typedef enum {
+//   ERR_OS,
+//   ERR_OPENSSL,
+// } error_origin;
+//
+// typedef struct {
+//   error_origin origin;
+//   int error_code;
+// } error_entry;
+//
+// static error_entry error_queue[MAX_ERRORS];
+// static size_t error_count = 0;
+// void add_error(error_origin origin, int error_code);
+// void print_errors(FILE *fp);
+// char *get_error_string(error_entry entry); // strerror(); ERR_error_string();
 
 typedef enum {
   GET,
